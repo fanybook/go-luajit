@@ -75,7 +75,7 @@ type LuaState interface {
 		access functions (stack -> C)
 	*/
 	//isnumber
-	//isstring
+	IsString(int) bool
 	//iscfunction
 	Type(int) int
 	//typename
@@ -111,7 +111,7 @@ type LuaState interface {
 	*/
 	GetTable(int)
 	GetField(int, string)
-	//rawget
+	RawGet(int)
 	//rawgeti
 	CreateTable(int, int)
 	//newuserdata
@@ -361,7 +361,7 @@ func (l *luaState) ToInteger(idx int) int64 {
 
 func (l *luaState) ToString(idx int) string {
 	var len C.size_t
-	cStr := C.lua_tolstring(l.l, -1, &len)
+	cStr := C.lua_tolstring(l.l, C.int(idx), &len)
 	return C.GoStringN(cStr, C.int(len))
 }
 
@@ -386,6 +386,10 @@ func (l *luaState) GetField(idx int, k string) {
 	defer C.free(unsafe.Pointer(kCStr))
 
 	C.lua_getfield(l.l, C.int(idx), kCStr)
+}
+
+func (l *luaState) RawGet(idx int) {
+	C.lua_rawget(l.l, C.int(idx))
 }
 
 func (l *luaState) CreateTable(narr int, nrec int) {
@@ -437,6 +441,10 @@ func (l *luaState) LDoString(s string) int {
 
 func (l *luaState) LGetMetaTable(s string) {
 	l.GetField(LUA_REGISTRYINDEX, s)
+}
+
+func (l *luaState) IsString(idx int) bool {
+	return l.Type(idx) == LUA_TSTRING
 }
 
 func (l *luaState) Type(idx int) int {
