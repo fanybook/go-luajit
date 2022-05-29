@@ -74,11 +74,11 @@ type LuaState interface {
 	/*
 		access functions (stack -> C)
 	*/
-	//isnumber
+	IsNumber(int) bool
 	IsString(int) bool
 	//iscfunction
 	Type(int) int
-	//typename
+	TypeName(int) string
 
 	//equal
 	//rawequal
@@ -86,7 +86,7 @@ type LuaState interface {
 
 	ToNumber(int) float64
 	ToInteger(int) int64
-	//toboolean
+	ToBoolean(int) bool
 	//pushlstring
 	//objlen
 	//tocfunction
@@ -97,7 +97,7 @@ type LuaState interface {
 	/*
 		push functions (C -> stack)
 	*/
-	//pushnil
+	PushNil()
 	PushNumber(float64)
 	PushInteger(int64)
 	PushString(string)
@@ -153,12 +153,12 @@ type LuaState interface {
 		miscellaneous functions
 	*/
 	//error
-	//next
+	Next(int) bool
 	//concat
 	//getallocf
 	//setallocf
-	//setexdata
-	//getexdata
+	SetExData(unsafe.Pointer)
+	GetExData() unsafe.Pointer
 	//luasetexdata2
 	//getexdata2
 
@@ -355,6 +355,10 @@ func (l *luaState) ToNumber(idx int) float64 {
 	return float64(C.lua_tonumber(l.l, C.int(idx)))
 }
 
+func (l *luaState) ToBoolean(idx int) bool {
+	return C.lua_toboolean(l.l, C.int(idx)) != 0
+}
+
 func (l *luaState) ToInteger(idx int) int64 {
 	return int64(C.lua_tointeger(l.l, C.int(idx)))
 }
@@ -443,6 +447,10 @@ func (l *luaState) LGetMetaTable(s string) {
 	l.GetField(LUA_REGISTRYINDEX, s)
 }
 
+func (l *luaState) IsNumber(idx int) bool {
+	return l.Type(idx) == LUA_TNUMBER
+}
+
 func (l *luaState) IsString(idx int) bool {
 	return l.Type(idx) == LUA_TSTRING
 }
@@ -451,12 +459,20 @@ func (l *luaState) Type(idx int) int {
 	return int(C.lua_type(l.l, C.int(idx)))
 }
 
+func (l *luaState) TypeName(tp int) string {
+	return C.GoString(C.lua_typename(l.l, C.int(tp)))
+}
+
 func (l *luaState) IsFunction(idx int) bool {
 	return l.Type(idx) == LUA_TFUNCTION
 }
 
 func (l *luaState) IsTable(idx int) bool {
 	return l.Type(idx) == LUA_TTABLE
+}
+
+func (l *luaState) PushNil() {
+	C.lua_pushnil(l.l)
 }
 
 func (l *luaState) PushNumber(n float64) {
@@ -476,6 +492,18 @@ func (l *luaState) PushString(s string) {
 
 func (l *luaState) PushLightUserData(p unsafe.Pointer) {
 	C.lua_pushlightuserdata(l.l, p)
+}
+
+func (l *luaState) Next(idx int) bool {
+	return C.lua_next(l.l, C.int(idx)) != 0
+}
+
+func (l *luaState) SetExData(exdata unsafe.Pointer) {
+	C.lua_setexdata(l.l, exdata)
+}
+
+func (l *luaState) GetExData() unsafe.Pointer {
+	return C.lua_getexdata(l.l)
 }
 
 func (l *luaState) Pop(idx int) {

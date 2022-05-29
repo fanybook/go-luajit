@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xingheliufang/go-luajit/luajit"
 )
 
@@ -20,6 +21,8 @@ extern int NewPoint(lua_State*);
 
 extern int Count(lua_State*);
 extern int NewCounter(lua_State*);
+
+extern int JSON(lua_State*);
 */
 import "C"
 
@@ -286,10 +289,114 @@ func Closure() {
 	}
 }
 
+func handleLuaTable(l luajit.LuaState) interface{} {
+	var a []interface{}
+	m := gin.H{}
+
+	l.PushNil()
+	for l.Next(-2) {
+
+		switch l.Type(-2) {
+
+		case luajit.LUA_TNUMBER:
+			switch l.Type(-1) {
+			case luajit.LUA_TNIL:
+				a = append(a, nil)
+			case luajit.LUA_TBOOLEAN:
+				a = append(a, l.ToBoolean(-1))
+			case luajit.LUA_TNUMBER:
+				a = append(a, l.ToNumber(-1))
+			case luajit.LUA_TSTRING:
+				a = append(a, l.ToString(-1))
+			case luajit.LUA_TTABLE:
+				a = append(a, handleLuaTable(l))
+			}
+		case luajit.LUA_TSTRING:
+			k := l.ToString(-2)
+			switch l.Type(-1) {
+			case luajit.LUA_TNIL:
+				m[k] = nil
+			case luajit.LUA_TBOOLEAN:
+				m[k] = l.ToBoolean(-1)
+			case luajit.LUA_TNUMBER:
+				m[k] = l.ToNumber(-1)
+			case luajit.LUA_TSTRING:
+				m[k] = l.ToString(-1)
+			case luajit.LUA_TTABLE:
+				m[k] = handleLuaTable(l)
+			}
+		}
+
+		l.Pop(1)
+	}
+
+	if len(a) != 0 {
+		return a
+	} else {
+		return m
+	}
+}
+
+//export JSON
+func JSON(ptr *C.struct_lua_State) C.int {
+	l := luajit.FromCLuaState(unsafe.Pointer(ptr))
+
+	if l.GetTop() != 2 || !l.IsNumber(1) || !l.IsTable(2) {
+		panic("param error")
+	}
+
+	ctx := (*gin.Context)(l.GetExData())
+	httpCode := l.ToInteger(1)
+
+	m := handleLuaTable(l)
+
+	ctx.JSON(int(httpCode), m)
+	return 0
+}
+
+var l luajit.LuaState
+
+func init() {
+	l = luajit.NewState()
+	l.NewTable()
+	l.PushCFunction(unsafe.Pointer(C.JSON))
+	l.SetField(-2, "JSON")
+	l.SetGlobal("Context")
+}
+
+func ginStringWapper(script string) func(c *gin.Context) {
+	return func(c *gin.Context) {
+		co := l.NewThread()
+		co.SetExData(unsafe.Pointer(c))
+		if co.LDoString(script) != luajit.LUA_OK {
+			panic(co.ToString(-1))
+		}
+	}
+}
+
+func ginFileWapper(scriptFile string) func(c *gin.Context) {
+	return func(c *gin.Context) {
+		co := l.NewThread()
+		co.SetExData(unsafe.Pointer(c))
+		if co.LDoFile(scriptFile) != luajit.LUA_OK {
+			panic(co.ToString(-1))
+		}
+	}
+}
+
+func HttpServer() {
+	r := gin.Default()
+
+	r.GET("/ping", ginFileWapper("ping.lua"))
+	r.Run()
+}
+
 func main() {
 	//Tables()
 
-	MetaTable()
+	//MetaTable()
 
 	//Closure()
+
+	HttpServer()
 }
