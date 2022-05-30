@@ -12,6 +12,7 @@ package luajit
 import "C"
 
 import (
+	"sync"
 	"unsafe"
 )
 
@@ -49,6 +50,10 @@ const (
 )
 
 type LuaState interface {
+	GoSetExData(interface{})
+	GoGetExData() (interface{}, bool)
+	GoDeleteExData()
+
 	/*
 		state manipulation
 	*/
@@ -276,6 +281,20 @@ func NewState() LuaState {
 
 func FromCLuaState(l unsafe.Pointer) LuaState {
 	return &luaState{(*C.struct_lua_State)(l)}
+}
+
+var m sync.Map
+
+func (l *luaState) GoSetExData(i interface{}) {
+	m.Store(l.l, i)
+}
+
+func (l *luaState) GoGetExData() (interface{}, bool) {
+	return m.Load(l.l)
+}
+
+func (l *luaState) GoDeleteExData() {
+	m.Delete(l.l)
 }
 
 func (l *luaState) NewThread() LuaState {

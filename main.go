@@ -345,12 +345,17 @@ func JSON(ptr *C.struct_lua_State) C.int {
 		panic("param error")
 	}
 
-	ctx := (*gin.Context)(l.GetExData())
-	httpCode := l.ToInteger(1)
+	if i, exist := l.GoGetExData(); !exist {
+		panic("cannot find context")
+	} else {
+		ctx := i.(*gin.Context)
+		httpCode := l.ToInteger(1)
 
-	m := handleLuaTable(l)
+		m := handleLuaTable(l)
 
-	ctx.JSON(int(httpCode), m)
+		ctx.JSON(int(httpCode), m)
+	}
+
 	return 0
 }
 
@@ -364,20 +369,20 @@ func init() {
 	l.SetGlobal("Context")
 }
 
-func ginStringWapper(script string) func(c *gin.Context) {
+func ginStringWrapper(script string) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		co := l.NewThread()
-		co.SetExData(unsafe.Pointer(c))
 		if co.LDoString(script) != luajit.LUA_OK {
 			panic(co.ToString(-1))
 		}
 	}
 }
 
-func ginFileWapper(scriptFile string) func(c *gin.Context) {
+func ginFileWrapper(scriptFile string) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		co := l.NewThread()
-		co.SetExData(unsafe.Pointer(c))
+		co.GoSetExData(c)
+		defer co.GoDeleteExData()
 		if co.LDoFile(scriptFile) != luajit.LUA_OK {
 			panic(co.ToString(-1))
 		}
@@ -387,7 +392,7 @@ func ginFileWapper(scriptFile string) func(c *gin.Context) {
 func HttpServer() {
 	r := gin.Default()
 
-	r.GET("/ping", ginFileWapper("ping.lua"))
+	r.GET("/ping", ginFileWrapper("ping.lua"))
 	r.Run()
 }
 
