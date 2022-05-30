@@ -372,6 +372,8 @@ func init() {
 func ginStringWrapper(script string) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		co := l.NewThread()
+		co.GoSetExData(c)
+		defer co.GoDeleteExData()
 		if co.LDoString(script) != luajit.LUA_OK {
 			panic(co.ToString(-1))
 		}
